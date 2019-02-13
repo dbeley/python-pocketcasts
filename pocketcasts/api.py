@@ -3,24 +3,26 @@
 from .episode import Episode
 from .podcast import Podcast
 import requests
+import json
 
 
 class Api(object):
     def __init__(self, email, password):
         self._session = requests.Session()
-        formdata = {
-            "user[email]": email,
-            "user[password]": password,
-            }
-        response = self._session.post("https://play.pocketcasts.com"
-                                      "/users/sign_in",
-                                      data=formdata)
+        login_json = {"email":email,"password":password,"scope":"webplayer"}
+        response = self._session.post("https://api.pocketcasts.com/user/login",
+                                      headers={},
+                                      json=login_json)
         response.raise_for_status()
         # TODO(Check if login was successful, code is 200 in every case)
+        
+        self._api_header = {"authorization": "Bearer " + str(response.json()['token'])}
 
     def my_podcasts(self):
-        response = self._session.post("https://play.pocketcasts.com"
-                                      "/web/podcasts/all.json")
+        data = {"v":"1"}
+        response = self._session.post("https://api.pocketcasts.com/user/podcast/list",
+                                      headers=self._api_header,
+                                      json=data)
         response.raise_for_status()
 
         podcasts = []
@@ -30,12 +32,13 @@ class Api(object):
         return podcasts
 
     def featured_podcasts(self):
-        response = self._session.get("https://static.pocketcasts.com"
-                                     "/discover/json/featured.json")
+        response = self._session.get("https://lists.pocketcasts.com/featured.json",
+                              headers=self._api_header,
+                              json={})
         response.raise_for_status()
 
         podcasts = []
-        for podcast_json in response.json()['result']['podcasts']:
+        for podcast_json in response.json()['podcasts']:
             podcast = Podcast._from_json(podcast_json, self)
             podcasts.append(podcast)
         return podcasts
@@ -45,32 +48,27 @@ class Api(object):
         page = 1
         pages_left = True
         episodes = []
-        while pages_left:
-            params = {'page': page, 'sort': sort_order, 'uuid': podcast.uuid}
-            response = self._session.post("https://play.pocketcasts.com"
-                                          "/web/episodes/find_by_podcast.json",
-                                          json=params)
-            response.raise_for_status()
+        params = {'page': page, 'sort': sort_order, 'uuid': podcast.uuid}
+        response = self._session.post("https://api.pocketcasts.com/user/podcast/episodes",
+                                      json=params)
+        response.raise_for_status()
 
-            json_response = response.json()
-            for episode_json in json_response['result']['episodes']:
-                episode = Episode._from_json(episode_json, podcast)
-                # episode = episode_json
-                episodes.append(episode)
 
-            # we should never ever receive more episodes than specified
-            # well, better be fault tolerant
-            if(json_response['result']['total'] > len(episodes)):
-                page = page + 1
-            else:
-                pages_left = False
+        for episode_json in response.json()['podcast']['episodes']:
+            episode = Episode._from_json(episode_json, podcast)
+            # episode = episode_json
+            episodes.append(episode)
 
         return episodes
 
     def podcast(self, uuid):
-        response = self._session.post("https://play.pocketcasts.com"
-                                      "/web/podcasts/podcast.json",
-                                      json={'uuid': uuid})
+        data = {'uuid': uuid}
+        
+
+        url = "https://cache.pocketcasts.com/podcast/full/"+ str(uuid) + "/0/3/1000"
+        response = self._session.get(url,
+                                      headers=self._api_header,
+                                      json=data)
         response.raise_for_status()
         response_json = response.json()
         podcast = Podcast._from_json(response_json['podcast'], self)
@@ -78,92 +76,94 @@ class Api(object):
         return podcast
 
     def popular_podcasts(self):
-        response = self._session.get("https://static.pocketcasts.com"
-                                     "/discover/json/popular_world.json")
+        response = self._session.get("https://lists.pocketcasts.com/popular.json",
+                              headers=self._api_header,
+                              json={})
         response.raise_for_status()
 
         podcasts = []
-        for podcast_json in response.json()['result']['podcasts']:
+        for podcast_json in response.json()['podcasts']:
             podcast = Podcast._from_json(podcast_json, self)
             podcasts.append(podcast)
         return podcasts
 
     def trending_podcasts(self):
-        response = self._session.get("https://static.pocketcasts.com"
-                                     "/discover/json/trending.json")
+        response = self._session.get("https://lists.pocketcasts.com/trending.json",
+                              headers=self._api_header,
+                              json={})
+        response.raise_for_status()
         response.raise_for_status()
 
         podcasts = []
-        for podcast_json in response.json()['result']['podcasts']:
+        for podcast_json in response.json()['podcasts']:
             podcast = Podcast._from_json(podcast_json, self)
             podcasts.append(podcast)
         return podcasts
 
     def new_episodes_released(self):
-        response = self._session.post("https://play.pocketcasts.com"
-                                      "/web/episodes/"
-                                      "new_releases_episodes.json")
+        response = self._session.post("https://api.pocketcasts.com/user/new_releases",
+                                      headers=self._api_header,
+                                      json={})
         response.raise_for_status()
 
         episodes = []
         podcasts = {}
         for episode_json in response.json()['episodes']:
-            podcast_uuid = episode_json['podcast_uuid']
-            if podcast_uuid not in podcasts:
-                podcasts[podcast_uuid] = self.podcast(podcast_uuid)
-            episode = Episode._from_json(episode_json, podcasts[podcast_uuid])
+            podcastUuid = episode_json['podcastUuid']
+            if podcastUuid not in podcasts:
+                podcasts[podcastUuid] = self.podcast(podcastUuid)
+            episode = Episode._from_json(episode_json, podcasts[podcastUuid])
             episodes.append(episode)
         return episodes
 
     def episodes_in_progress(self):
-        response = self._session.post("https://play.pocketcasts.com"
-                                      "/web/episodes/"
-                                      "in_progress_episodes.json")
+        response = self._session.post("https://api.pocketcasts.com/user/in_progress",
+                              headers=self._api_header,
+                              json={})
         response.raise_for_status()
 
         episodes = []
         podcasts = {}
         for episode_json in response.json()['episodes']:
-            podcast_uuid = episode_json['podcast_uuid']
-            if podcast_uuid not in podcasts:
-                podcasts[podcast_uuid] = self.podcast(podcast_uuid)
-            episode = Episode._from_json(episode_json, podcasts[podcast_uuid])
+            podcastUuid = episode_json['podcastUuid']
+            if podcastUuid not in podcasts:
+                podcasts[podcastUuid] = self.podcast(podcastUuid)
+            episode = Episode._from_json(episode_json, podcasts[podcastUuid])
             episodes.append(episode)
         return episodes
 
     def starred_episodes(self):
-        response = self._session.post("https://play.pocketcasts.com"
-                                      "/web/episodes/"
-                                      "starred_episodes.json")
+        response = self._session.post("https://api.pocketcasts.com/user/starred",
+                      headers=self._api_header,
+                      json={})
         response.raise_for_status()
 
         episodes = []
         podcasts = {}
         for episode_json in response.json()['episodes']:
-            podcast_uuid = episode_json['podcast_uuid']
-            if podcast_uuid not in podcasts:
-                podcasts[podcast_uuid] = self.podcast(podcast_uuid)
-            episode = Episode._from_json(episode_json, podcasts[podcast_uuid])
+            podcastUuid = episode_json['podcastUuid']
+            if podcastUuid not in podcasts:
+                podcasts[podcastUuid] = self.podcast(podcastUuid)
+            episode = Episode._from_json(episode_json, podcasts[podcastUuid])
             episodes.append(episode)
         return episodes
 
-    def mark_as_played(self, podcast_uuid, episode_uuid, played):
-        playing_status = (Episode.PlayingStatus.Played if played
-                          else Episode.PlayingStatus.Unplayed)
-        params = {'playing_status': playing_status,
-                  'podcast_uuid': podcast_uuid,
-                  'uuid': episode_uuid,
-                  'played_up_to': 0}
-        response = self._session.post("https://play.pocketcasts.com"
-                                      "/web/episodes/"
-                                      "update_episode_position.json",
-                                      json=params)
+    def mark_as_played(self, podcastUuid, episode_uuid, played):
+        params = {'podcast': podcastUuid,
+                  'status': 3, #played
+                  'uuid': episode_uuid}
+        response = self._session.post("https://api.pocketcasts.com/user/starred",
+                      headers=self._api_header,
+                      json=params)
+
+        ##TODO Check to see if we need to hit https://api.pocketcasts.com/up_next/remove
+
         response.raise_for_status()
         # TODO(Check response for error)
 
-    def mark_as_starred(self, podcast_uuid, episode_uuid, starred):
+    def mark_as_starred(self, podcastUuid, episode_uuid, starred):
         params = {'starred': starred,
-                  'podcast_uuid': podcast_uuid,
+                  'podcastUuid': podcastUuid,
                   'uuid': episode_uuid}
         response = self._session.post("https://play.pocketcasts.com"
                                       "/web/episodes/"
@@ -200,11 +200,11 @@ class Api(object):
             podcasts.append(podcast)
         return podcasts
 
-    def subscribe_podcast(self, podcast_uuid, subscribe=True):
+    def subscribe_podcast(self, podcastUuid, subscribe=True):
         if not subscribe:
-            return self.unsubscribe(podcast_uuid)
+            return self.unsubscribe(podcastUuid)
 
-        params = {'uuid': podcast_uuid}
+        params = {'uuid': podcastUuid}
         response = self._session.post("https://play.pocketcasts.com"
                                       "/web/podcasts/"
                                       "subscribe.json",
@@ -212,8 +212,8 @@ class Api(object):
         response.raise_for_status()
         # TODO(Check response for error)
 
-    def unsubscribe_podcast(self, podcast_uuid):
-        params = {'uuid': podcast_uuid}
+    def unsubscribe_podcast(self, podcastUuid):
+        params = {'uuid': podcastUuid}
         response = self._session.post("https://play.pocketcasts.com"
                                       "/web/podcasts/"
                                       "unsubscribe.json",
@@ -221,11 +221,11 @@ class Api(object):
         response.raise_for_status()
         # TODO(Check response for error)
 
-    def update_episode_position(self, podcast_uuid, episode_uuid, position,
+    def update_episode_position(self, podcastUuid, episode_uuid, position,
                                 episode_duration=0):
         # TODO(Check position value < duration)
         params = {'playing_status': Episode.PlayingStatus.Unplayed,
-                  'podcast_uuid': podcast_uuid,
+                  'podcastUuid': podcastUuid,
                   'uuid': episode_uuid,
                   'played_up_to': position,
                   # web player sends duration so do I...
