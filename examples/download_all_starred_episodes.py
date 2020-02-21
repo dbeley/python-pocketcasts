@@ -10,6 +10,12 @@ def get_valid_filename(s):
     return re.sub(r"(?u)[^-\w. ]", "", s)
 
 
+def get_extension(url):
+    if "?" in url:
+        url, _ = url.split("?", 1)
+    return url.split(".")[-1]
+
+
 print("Reading configuration file config.ini.")
 
 config = configparser.ConfigParser()
@@ -26,8 +32,10 @@ total_size = len(starred)
 
 Path("podcasts/").mkdir(parents=True, exist_ok=True)
 for index, i in enumerate(starred, 1):
+    print("########## Processing :")
+    print(i)
     filename = get_valid_filename(
-        f"{i._published_at.strftime('%Y%m%d')} - {i._podcast._title} - {i._title}.{i._url.split('.')[-1]}"
+        f"{i._published_at.strftime('%Y%m%d')} - {i._podcast._title} - {i._title}.{get_extension(i._url)}"
     )
     print(f"Downloading {index}/{total_size} : {filename}")
     r = requests.get(i._url)
