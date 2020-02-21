@@ -93,3 +93,6 @@ ENV/
 
 # tags
 tags
+
+# config file
+config.ini
