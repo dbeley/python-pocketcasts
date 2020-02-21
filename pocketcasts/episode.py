@@ -29,21 +29,23 @@ class Episode(object):
         # I don't know what is_deleted means exactly, it seems always False
         # I don't know what id means, it is an unsigned int or null
         self._uuid = uuid
-        self._title = kwargs.pop('title', '')
-        self._url = kwargs.pop('url', '')
-        self._playing_status = kwargs.pop('playing_status',
-                                          Episode.PlayingStatus.Unplayed)
-        self._file_type = kwargs.pop('file_type', '')
-        self._published_at = kwargs.pop('published_at', None)
+        self._title = kwargs.pop("title", "")
+        self._url = kwargs.pop("url", "")
+        self._playing_status = kwargs.pop(
+            "playing_status", Episode.PlayingStatus.Unplayed
+        )
+        self._file_type = kwargs.pop("fileType", "")
+        self._published_at = kwargs.pop("published", None)
         if self._published_at is not None:
-            self._published_at = _date2timeStamp(self._published_at,
-                                                 "%Y-%m-%d %H:%M:%S")
-        self._duration = kwargs.pop('duration', 0)
-        self._starred = bool(kwargs.pop('starred', 0))
-        self._is_video = kwargs.pop('is_video', '')
-        self._played_up_to = kwargs.pop('played_up_to', 0)
-        self._size = kwargs.pop('size', 0)
-        self._notes = kwargs.pop('notes', None)
+            self._published_at = _date2timeStamp(
+                self._published_at, "%Y-%m-%dT%H:%M:%SZ"
+            )
+        self._duration = kwargs.pop("duration", 0)
+        self._starred = bool(kwargs.pop("starred", 0))
+        self._is_video = kwargs.pop("is_video", "")
+        self._played_up_to = kwargs.pop("playedUpTo", 0)
+        self._size = kwargs.pop("size", 0)
+        self._notes = kwargs.pop("notes", None)
 
     def __repr__(self):
         return str(self.__dict__)
@@ -117,8 +119,9 @@ class Episode(object):
 
     @played_up_to.setter
     def played_up_to(self, position):
-        self._api.update_episode_position(self.podcast.uuid, self.uuid,
-                                          position, self.duration)
+        self._api.update_episode_position(
+            self.podcast.uuid, self.uuid, position, self.duration
+        )
         self._played_up_to = position
         self._playing_status = Episode.PlayingStatus.Unplayed
 
@@ -135,5 +138,5 @@ class Episode(object):
     @classmethod
     def _from_json(cls, json, podcast=None):
         json = json.copy()
-        uuid = json.pop('uuid')
+        uuid = json.pop("uuid")
         return cls(uuid, podcast, **json)
